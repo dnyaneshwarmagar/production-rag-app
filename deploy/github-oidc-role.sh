@@ -7,6 +7,9 @@ set -euo pipefail
 ACCOUNT_ID="${ACCOUNT_ID:-815398003681}"
 REGION="${AWS_REGION:-us-east-1}"
 REPO="${GITHUB_REPO:-dnyaneshwarmagar/production-rag-app}"
+# GitHub puts these immutable ids in the OIDC subject: repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:...
+OWNER_ID="${OWNER_ID:-89983890}"
+REPO_ID="${REPO_ID:-1452846802}"
 INSTANCE_ID="${INSTANCE_ID:-i-071ee575df0c00009}"
 ROLE_NAME="${ROLE_NAME:-github-rag-deploy}"
 OIDC_URL="https://token.actions.githubusercontent.com"
@@ -32,7 +35,7 @@ trust=$(cat <<EOF
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:${REPO}:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub": "repo:${REPO%%/*}@${OWNER_ID}/${REPO#*/}@${REPO_ID}:ref:refs/heads/main"
         }
       }
     }

@@ -46,7 +46,7 @@ from .s3_sync import sync_bucket
 from .storage import get_store
 
 app = FastAPI(title="Nimbu Mart RAG API", version="1.0",
-              description="Production RAG reference app - Future with Shivank (Shivank Agrawal)")
+              description="Production RAG reference app")
 
 EMBEDDER = get_embedder()
 MODEL_ID = fingerprint(EMBEDDER)

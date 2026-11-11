@@ -1,4 +1,4 @@
-"""Production-style RAG service (Module 13) by Shivank Agrawal - Future with Shivank.
+"""Production-style RAG service.
 
     api.py      FastAPI: upload documents, check status, delete, ask questions
     worker.py   the background ingestion job (run by an RQ worker)

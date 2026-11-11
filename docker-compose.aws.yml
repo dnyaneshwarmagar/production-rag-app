@@ -24,7 +24,7 @@ services:
         required: true
     environment: &app_env
       REDIS_URL: redis://redis:6379/0
-      # Fits a 2 GB instance. Change to fastembed and USE_RERANKER=1 on a larger machine.
+      # Sized for a t3.micro (1 GB) plus swap. Use fastembed and USE_RERANKER=1 only on a larger machine.
       EMBEDDER: wordllama
       USE_RERANKER: "0"
     ports: ["8000:8000"]
