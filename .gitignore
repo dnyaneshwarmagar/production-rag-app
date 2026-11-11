@@ -1,9 +1,35 @@
-.venv/
+# Secrets. .env.example is the template and stays in git.
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+
+# Python environments and build output
+.venv/
+venv/
+env/
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Local runtime. Source documents in data/raw stay in git.
 blobs/
 logs/
 reports/
 data/processed/
-.pytest_cache/
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp

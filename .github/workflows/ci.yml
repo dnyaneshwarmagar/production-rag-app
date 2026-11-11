@@ -1,0 +1,83 @@
+# Tests on every pull request and push.
+# A push to main, after the tests pass, publishes the repo to the EC2 instance
+# and rebuilds the API and worker containers. .env stays on the server.
+#
+# One-time setup: bash deploy/github-oidc-role.sh
+# That creates the IAM role named below and prints the GitHub secret to set.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run tests
+        env:
+          EMBEDDER: hashing
+          LLM_PROVIDER: none
+          SESSION_SECRET: ci-test-secret
+          LANGSMITH_TRACING: "false"
+        run: python -m pytest -q
+
+  deploy:
+    needs: test
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: production-ec2
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-east-1
+      AWS_ROLE_ARN: arn:aws:iam::815398003681:role/github-rag-deploy
+      INSTANCE_ID: i-071ee575df0c00009
+      APP_DIR: /opt/rag
+      SSH_USER: ubuntu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Publish and restart
+        run: |
+          set -euo pipefail
+          read -r IP AZ < <(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+            --query "Reservations[0].Instances[0].[PublicIpAddress,Placement.AvailabilityZone]" --output text)
+          if [ -z "$IP" ] || [ "$IP" = "None" ]; then
+            echo "Instance $INSTANCE_ID has no public IP."
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          ssh-keyscan -H "$IP" >> ~/.ssh/known_hosts
+          ssh-keygen -t ed25519 -N "" -f ~/.ssh/deploy -q
+          tar -czf /tmp/rag.tgz \
+            --exclude .git --exclude .env --exclude .venv --exclude venv \
+            --exclude __pycache__ --exclude .pytest_cache --exclude logs \
+            --exclude blobs --exclude reports --exclude data/processed \
+            -C "$GITHUB_WORKSPACE" .
+          aws ec2-instance-connect send-ssh-public-key \
+            --instance-id "$INSTANCE_ID" \
+            --instance-os-user "$SSH_USER" \
+            --ssh-public-key "file://$HOME/.ssh/deploy.pub" \
+            --availability-zone "$AZ"
+          ssh -i ~/.ssh/deploy -o StrictHostKeyChecking=yes "$SSH_USER@$IP" \
+            "tar -xzf - -C $APP_DIR && bash $APP_DIR/deploy/update.sh" < /tmp/rag.tgz

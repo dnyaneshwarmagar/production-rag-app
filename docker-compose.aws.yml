@@ -1,0 +1,48 @@
+# One EC2 instance: API + ingestion worker + Redis.
+# Postgres is Amazon RDS (pgvector). Source documents are in S3.
+#
+#   docker compose -f docker-compose.aws.yml up -d --build
+#
+# .env on the instance must set:
+#   DATABASE_URL=postgresql://rag:PASSWORD@<rds-host>:5432/rag?sslmode=require
+#   S3_BUCKET=<bucket>
+#   AWS_REGION=ap-south-1
+#   S3_PREFIX=docs/
+# Prefer an EC2 instance role for S3 (metadata hop limit 2). Access keys in .env also work.
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no --maxmemory 64mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+
+  api:
+    build: .
+    command: uvicorn app.api:app --host 0.0.0.0 --port 8000
+    env_file:
+      - path: .env
+        required: true
+    environment: &app_env
+      REDIS_URL: redis://redis:6379/0
+      # Fits a 2 GB instance. Change to fastembed and USE_RERANKER=1 on a larger machine.
+      EMBEDDER: wordllama
+      USE_RERANKER: "0"
+    ports: ["8000:8000"]
+    restart: unless-stopped
+    depends_on: [redis]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  worker:
+    build: .
+    command: rq worker ingest --with-scheduler --worker-class rq.worker.SimpleWorker --url redis://redis:6379/0
+    env_file:
+      - path: .env
+        required: true
+    environment: *app_env
+    restart: unless-stopped
+    depends_on: [redis]

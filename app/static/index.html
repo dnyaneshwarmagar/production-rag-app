@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nimbu Mart</title>
+  <style>
+    :root { --ink:#1c1917; --muted:#57534e; --line:#e7e5e4; --bg:#f6f5f3; --paper:#fff; --accent:#1d4ed8; --bad:#b91c1c; --ok:#166534; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.45 "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+    header, main { max-width: 960px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px 0; }
+    h1 { font-size: 1.25rem; margin: 0; }
+    h2 { font-size: 1.05rem; margin: 0 0 12px; }
+    main { padding: 16px 20px 40px; }
+    .card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin: 10px 0 4px; }
+    input, select, textarea, button { font: inherit; }
+    input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    textarea { min-height: 72px; resize: vertical; }
+    button, .btn { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+    button.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+    button.danger { background: var(--bad); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+    .row > * { flex: 1; min-width: 140px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tabs button { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+    .tabs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    .error { color: var(--bad); }
+    .ok { color: var(--ok); }
+    .pill { display: inline-block; border-radius: 999px; padding: 1px 8px; background: #f5f5f4; font-size: 0.8rem; }
+    .pill.indexed { background: #dcfce7; }
+    .pill.failed { background: #fee2e2; }
+    .pill.queued, .pill.processing { background: #fef3c7; }
+    #answer { white-space: pre-wrap; }
+    .hide { display: none; }
+    .who { text-align: right; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Nimbu Mart</h1>
+    <div class="who" id="who"></div>
+  </header>
+  <main>
+    <p class="muted" id="health">Checking the service…</p>
+    <section id="login" class="card hide">
+      <div id="login-panel">
+        <h2>Sign in</h2>
+        <form id="login-form">
+          <label>Username</label>
+          <input name="username" autocomplete="username" required>
+          <label>Password</label>
+          <input name="password" type="password" autocomplete="current-password" required>
+          <p class="error" id="login-error"></p>
+          <button type="submit">Sign in</button>
+        </form>
+        <p><button type="button" class="ghost" id="show-signup">Create an account</button></p>
+      </div>
+      <form id="signup-form" class="hide">
+        <h2>Create an account</h2>
+        <label>Username</label>
+        <input name="username" autocomplete="username" required minlength="3">
+        <label>Password</label>
+        <input name="password" type="password" autocomplete="new-password" required minlength="8">
+        <label>Role</label>
+        <select name="role">
+          <option value="public">public</option>
+          <option value="employee" selected>employee</option>
+          <option value="hr">hr</option>
+        </select>
+        <p class="muted">Public, employee, or HR. An existing admin creates admin accounts.</p>
+        <p class="error" id="signup-error"></p>
+        <button type="submit">Create account</button>
+        <button type="button" class="ghost" id="show-login">Back to sign in</button>
+      </form>
+    </section>
+    <div id="app" class="hide">
+      <nav class="tabs">
+        <button type="button" data-tab="ask" class="on">Ask</button>
+        <button type="button" data-tab="docs">Documents</button>
+        <button type="button" data-tab="add" class="admin-only">Add</button>
+        <button type="button" data-tab="users" class="admin-only">Users</button>
+      </nav>
+      <section id="ask" class="card">
+        <h2>Ask</h2>
+        <p class="muted" id="scope"></p>
+        <form id="ask-form">
+          <label>Question</label>
+          <textarea name="question" required minlength="2" maxlength="2000"></textarea>
+          <div class="row">
+            <div>
+              <label>Passages</label>
+              <input name="top_k" type="number" min="1" max="20" value="5">
+            </div>
+            <div>
+              <label>Archived documents</label>
+              <select name="include_archived"><option value="false">Hide</option><option value="true">Include</option></select>
+            </div>
+          </div>
+          <p><button type="submit">Ask</button></p>
+        </form>
+        <p class="error" id="ask-error"></p>
+        <p id="answer"></p>
+        <p class="muted" id="meta"></p>
+        <ul id="citations"></ul>
+      </section>
+      <section id="docs" class="card hide">
+        <h2>Documents</h2>
+        <p><button type="button" class="ghost" id="refresh-docs">Refresh</button></p>
+        <table>
+          <thead><tr><th>File</th><th>Status</th><th>Access</th><th>Chunks</th><th></th></tr></thead>
+          <tbody id="doc-rows"></tbody>
+        </table>
+        <pre id="doc-detail" class="muted"></pre>
+      </section>
+      <section id="add" class="card hide">
+        <h2>Upload</h2>
+        <form id="upload-form">
+          <label>File</label>
+          <input name="file" type="file" required accept=".pdf,.md,.txt,.html,.htm,.csv">
+          <div class="row">
+            <div><label>Title</label><input name="title"></div>
+            <div><label>Department</label><input name="department" value="general"></div>
+          </div>
+          <div class="row">
+            <div><label>Who can read it</label><input name="access" value="public" placeholder="public, employees, hr"></div>
+            <div><label>Type</label><input name="doc_type" value="document"></div>
+          </div>
+          <div class="row">
+            <div><label>Version</label><input name="version" value="1"></div>
+            <div><label>Status</label><select name="status"><option>active</option><option>archived</option></select></div>
+            <div><label>Trust</label><select name="trust"><option>trusted</option><option>untrusted</option></select></div>
+          </div>
+          <p><button type="submit">Upload</button></p>
+          <p class="error" id="upload-error"></p>
+          <p class="ok" id="upload-ok"></p>
+        </form>
+        <h2>Sync from S3</h2>
+        <p class="muted">Index files already in the bucket under docs/.</p>
+        <button type="button" id="sync">Sync</button>
+        <pre id="sync-result" class="muted"></pre>
+      </section>
+      <section id="users" class="card hide">
+        <h2>Users</h2>
+        <form id="user-form">
+          <div class="row">
+            <div><label>Username</label><input name="username" required minlength="3"></div>
+            <div><label>Password</label><input name="password" type="password" required minlength="8"></div>
+            <div>
+              <label>Role</label>
+              <select name="role">
+                <option value="public">public</option>
+                <option value="employee">employee</option>
+                <option value="hr">hr</option>
+                <option value="admin">admin</option>
+              </select>
+            </div>
+          </div>
+          <label>Admin can search these groups</label>
+          <input name="access" value="public, employees, hr">
+          <p><button type="submit">Create user</button></p>
+          <p class="error" id="user-error"></p>
+        </form>
+        <ul id="user-list"></ul>
+      </section>
+    </div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let me = null;
+    let poll = null;
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, { credentials: "same-origin", ...opts });
+      const text = await res.text();
+      let body = {};
+      try { body = text ? JSON.parse(text) : {}; } catch { body = { detail: text }; }
+      if (!res.ok) {
+        const detail = body.detail;
+        throw new Error(typeof detail === "string" ? detail : "request failed");
+      }
+      return body;
+    }
+
+    function show(name) {
+      for (const id of ["ask", "docs", "add", "users"]) $(id).classList.toggle("hide", id !== name);
+      document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+    }
+
+    async function loadHealth() {
+      try {
+        const h = await api("/health");
+        $("health").textContent = `${h.blob_store} · ${h.indexed_chunks} chunks · pgvector ${h.pgvector} · queue ${h.queue_waiting} · langsmith ${h.langsmith ? "on" : "off"}`;
+      } catch (e) {
+        $("health").textContent = e.message;
+        $("health").classList.add("error");
+      }
+    }
+
+    function signedIn() {
+      $("login").classList.add("hide");
+      $("app").classList.remove("hide");
+      $("who").innerHTML = `${me.username} · ${me.role} <button type="button" class="ghost" id="logout">Sign out</button>`;
+      $("scope").textContent = `Answers use groups: ${me.groups.join(", ")}`;
+      document.querySelectorAll(".admin-only").forEach((el) => el.classList.toggle("hide", me.role !== "admin"));
+      $("logout").onclick = async () => { await api("/logout", { method: "POST" }); location.reload(); };
+    }
+
+    async function boot() {
+      await loadHealth();
+      try {
+        me = await api("/me");
+        signedIn();
+      } catch {
+        $("login").classList.remove("hide");
+      }
+    }
+
+    $("show-signup").onclick = () => {
+      $("login-panel").classList.add("hide");
+      $("signup-form").classList.remove("hide");
+    };
+    $("show-login").onclick = () => {
+      $("signup-form").classList.add("hide");
+      $("login-panel").classList.remove("hide");
+    };
+
+    $("login-form").onsubmit = async (ev) => {
+      ev.preventDefault();
+      $("login-error").textContent = "";
+      const data = Object.fromEntries(new FormData(ev.target));
+      try {
+        me = await api("/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+        signedIn();
+      } catch (e) { $("login-error").textContent = e.message; }
+    };
+
+    $("signup-form").onsubmit = async (ev) => {
+      ev.preventDefault();
+      $("signup-error").textContent = "";
+      const data = Object.fromEntries(new FormData(ev.target));
+      try {
+        me = await api("/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: data.username, password: data.password, role: data.role }),
+        });
+        signedIn();
+      } catch (e) { $("signup-error").textContent = e.message; }
+    };
+
+    document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
+      show(b.dataset.tab);
+      if (b.dataset.tab === "docs") loadDocs();
+      if (b.dataset.tab === "users") loadUsers();
+    });
+
+    $("ask-form").onsubmit = async (ev) => {
+      ev.preventDefault();
+      $("ask-error").textContent = "";
+      $("answer").textContent = "";
+      $("meta").textContent = "";
+      $("citations").replaceChildren();
+      const data = Object.fromEntries(new FormData(ev.target));
+      try {
+        const result = await api("/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: data.question,
+            include_archived: data.include_archived === "true",
+            top_k: Number(data.top_k),
+          }),
+        });
+        $("answer").textContent = result.answer;
+        $("meta").textContent = `${result.mode}${result.abstained ? " · abstained" : ""} · ${result.total_ms} ms · ${result.trace_id}`;
+        for (const c of result.citations || []) {
+          const li = document.createElement("li");
+          li.textContent = `${c.id} · ${c.title || c.doc_id} · page ${c.page ?? "—"}`;
+          $("citations").append(li);
+        }
+      } catch (e) { $("ask-error").textContent = e.message; }
+    };
+
+    async function loadDocs() {
+      const docs = await api("/documents");
+      const body = $("doc-rows");
+      body.replaceChildren();
+      for (const d of docs) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td></td><td><span class="pill"></span></td><td></td><td></td><td></td>`;
+        tr.children[0].textContent = d.filename;
+        tr.children[1].firstChild.textContent = d.status;
+        tr.children[1].firstChild.classList.add(d.status);
+        tr.children[2].textContent = (d.access || []).join(", ");
+        tr.children[3].textContent = d.chunks;
+        if (d.error) tr.children[3].title = d.error;
+        if (me.role === "admin") {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "danger";
+          btn.textContent = "Delete";
+          btn.onclick = async (ev) => {
+            ev.stopPropagation();
+            if (!confirm(`Delete ${d.filename}?`)) return;
+            await api("/documents/" + d.id, { method: "DELETE" });
+            loadDocs();
+          };
+          tr.children[4].append(btn);
+        }
+        tr.onclick = async () => {
+          const full = await api("/documents/" + d.id);
+          $("doc-detail").textContent = JSON.stringify(full, null, 2);
+        };
+        body.append(tr);
+      }
+      const pending = docs.some((d) => d.status === "queued" || d.status === "processing");
+      clearInterval(poll);
+      if (pending) poll = setInterval(loadDocs, 3000);
+    }
+    $("refresh-docs").onclick = loadDocs;
+
+    $("upload-form").onsubmit = async (ev) => {
+      ev.preventDefault();
+      $("upload-error").textContent = "";
+      $("upload-ok").textContent = "";
+      try {
+        const result = await api("/documents", { method: "POST", body: new FormData(ev.target) });
+        $("upload-ok").textContent = result.duplicate ? "Already uploaded." : "Queued for indexing.";
+        ev.target.reset();
+      } catch (e) { $("upload-error").textContent = e.message; }
+    };
+
+    $("sync").onclick = async () => {
+      $("sync-result").textContent = "Syncing…";
+      try {
+        const result = await api("/s3/sync", { method: "POST" });
+        $("sync-result").textContent = JSON.stringify(result.counts, null, 2);
+      } catch (e) { $("sync-result").textContent = e.message; }
+    };
+
+    async function loadUsers() {
+      const users = await api("/users");
+      const list = $("user-list");
+      list.replaceChildren();
+      for (const u of users) {
+        const li = document.createElement("li");
+        li.textContent = `${u.username} · ${u.role} · ${u.groups.join(", ")}`;
+        list.append(li);
+      }
+    }
+
+    $("user-form").onsubmit = async (ev) => {
+      ev.preventDefault();
+      $("user-error").textContent = "";
+      const data = Object.fromEntries(new FormData(ev.target));
+      try {
+        await api("/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: data.username,
+            password: data.password,
+            role: data.role,
+            access: data.access.split(",").map((s) => s.trim()).filter(Boolean),
+          }),
+        });
+        ev.target.reset();
+        loadUsers();
+      } catch (e) { $("user-error").textContent = e.message; }
+    };
+
+    boot();
+  </script>
+</body>
+</html>
